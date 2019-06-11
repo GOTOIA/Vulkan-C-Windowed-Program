@@ -59,7 +59,7 @@ int main()
     
     // Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
     unsigned extension_count;
-    if(!SDL_Vulkan_GetInstanceExtensions(window, &extension_count, NULL)) {
+    if(!SDL_Vulkan_GetInstanceExtensions(window, &ext ension_count, NULL)) {
         std::cout << "Could not get the number of required instance extensions from SDL." << std::endl;
         return 1;
     }
