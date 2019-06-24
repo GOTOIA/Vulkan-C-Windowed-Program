@@ -71,9 +71,78 @@ int main()
 		std::cout << "\t" << extension.extensionName << std::endl;
 	}
 	/*End Enumerating Instance Layer Properties*/
-		
-	
 
+
+	// Use validation layers if this is a debug build
+	std::vector<const char*> layers;
+#if defined(_DEBUG)
+	layers.push_back("VK_LAYER_LUNARG_standard_validation");
+#endif
+
+	/*Instance Creation */
+	VkInstance instance;
+	VkInstanceCreateInfo instanceInfo = {};
+
+	if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+		std::cout << "Could not initialize SDL." << std::endl;
+		return 1;
+	}
+	SDL_Window* window = SDL_CreateWindow("Vulkan Window", SDL_WINDOWPOS_CENTERED,
+		SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_VULKAN);
+	if (window == NULL) {
+		std::cout << "Could not create SDL window." << std::endl;
+		return 1;
+	}
+
+	// Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
+	unsigned extension_count;
+	if (!SDL_Vulkan_GetInstanceExtensions(window, &extension_count, NULL)) {
+		std::cout << "Could not get the number of required instance extensions from SDL." << std::endl;
+		return 1;
+	}
+	std::vector<const char*> extensions(extension_count);
+	if (!SDL_Vulkan_GetInstanceExtensions(window, &extension_count, extensions.data())) {
+		std::cout << "Could not get the names of required instance extensions from SDL." << std::endl;
+		return 1;
+	}
+
+	//Specify layer Name that need to be enabled on instance
+	instanceInfo.ppEnabledLayerNames=layers.data();
+
+	//Specify extensions that need to be enabled on instance
+	instanceInfo.ppEnabledExtensionNames = extensions.data();
+
+	//Create the instance object
+	vkCreateInstance(&instanceInfo, NULL, &instance);
+
+	/*Enumerate physical devices*/
+
+	VkPhysicalDevice gpu;
+	uint32_t gpuCount=0;
+	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+
+	//Get Number of Gpu Count
+	vkEnumeratePhysicalDevices(instance, &gpuCount, NULL);
+
+	if (gpuCount == 0) {
+		throw std::runtime_error("failed to find GPUs with Vulkan support!");
+	}
+
+	std::vector<VkPhysicalDevice> devices(gpuCount);
+	
+	//Get Gpu Information
+	vkEnumeratePhysicalDevices(instance, &gpuCount,devices.data());
+
+	for (const auto& device : devices) {
+			physicalDevice = device;
+			break;
+		
+	}
+
+	if (physicalDevice == VK_NULL_HANDLE) {
+		throw std::runtime_error("failed to find a suitable GPU!");
+	}
+	
 	system("pause");
 
     return 0;
