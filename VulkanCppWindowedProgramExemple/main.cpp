@@ -115,6 +115,8 @@ int main()
 	//Create the instance object
 	vkCreateInstance(&instanceInfo, NULL, &instance);
 
+	/*End Instance Creation*/
+
 	/*Enumerate physical devices*/
 
 	VkPhysicalDevice gpu;
@@ -142,7 +144,8 @@ int main()
 	if (physicalDevice == VK_NULL_HANDLE) {
 		throw std::runtime_error("failed to find a suitable GPU!");
 	}
-	
+	/*End Enumerate physical devices*/
+
 	system("pause");
 
     return 0;
