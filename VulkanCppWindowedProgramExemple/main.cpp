@@ -40,196 +40,189 @@ Create and destroy a Vulkan surface on an SDL window.
 #include <SDL2/SDL_vulkan.h>
 #include <vulkan/vulkan.hpp>
 
+#include <optional>
 #include <iostream>
 #include <vector>
+#include<string>
 
-int main()
-{
-	/*Enumerating Instance Layer Properties*/
-	uint32_t instanceLayerCount; //Compteur de Layer
+const int WIDTH = 800;
+const int HEIGHT = 600;
 
-	
-	VkLayerProperties *layerProperties =nullptr; //Proprietes Layers
-	vkEnumerateInstanceLayerProperties(&instanceLayerCount, layerProperties);
+const std::vector<const char*> validationLayers = {
+	"VK_LAYER_KHRONOS_validation"
+};
 
-
-	uint32_t instanceExtensionCount=0; //Compteur d'extentions
-	VkResult res = vkEnumerateInstanceExtensionProperties(nullptr,
-		&instanceExtensionCount, nullptr); // Enumeration des Extensions
-
-	
-	std::vector<VkExtensionProperties> instanceExtensions(instanceExtensionCount);//Vecteur des extensions
-
-	res = vkEnumerateInstanceExtensionProperties(nullptr, 
-		&instanceExtensionCount, instanceExtensions.data());// Enumeration des Extensions à hauteur du nombre d'extension relevé
-
-
-	//Affichage console des extensions disponibles
-	std::cout << "available extensions:" << std::endl;
-
-	for (const auto& extension : instanceExtensions) {
-		std::cout << "\t" << extension.extensionName << std::endl;
-	}
-	/*End Enumerating Instance Layer Properties*/
-
-
-	// Use validation layers if this is a debug build
-	std::vector<const char*> layers;
-#if defined(_DEBUG)
-	layers.push_back("VK_LAYER_LUNARG_standard_validation");
+#ifdef NDEBUG
+const bool enableValidationLayers = false;
+#else
+const bool enableValidationLayers = true;
 #endif
 
-	/*Instance Creation */
-	VkInstance instance;
-	VkInstanceCreateInfo instanceInfo = {};
 
+
+struct QueueFamilyIndices {
+	std::optional<uint32_t> graphicsFamily;
+
+	bool isComplete() {
+		return graphicsFamily.has_value();
+	}
+};
+
+
+//Global
+SDL_Window* window;
+
+
+
+
+bool isDeviceSuitable(VkPhysicalDevice device);
+QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
+std::vector<const char*> getRequiredExtensions();
+bool checkValidationLayerSupport();
+
+
+
+int main() {
+	
+
+	VkInstance instance;
+	
+
+	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+	VkDevice device=NULL;
+
+	VkQueue graphicsQueue=NULL;
+
+	//TODO initWindow();
+	//Set SDL and SDL WINDOW
 	if (SDL_Init(SDL_INIT_VIDEO) != 0) {
 		std::cout << "Could not initialize SDL." << std::endl;
 		return 1;
 	}
-	SDL_Window* window = SDL_CreateWindow("Vulkan Window", SDL_WINDOWPOS_CENTERED,
+	window = SDL_CreateWindow("Vulkan Window", SDL_WINDOWPOS_CENTERED,
 		SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_VULKAN);
 	if (window == NULL) {
 		std::cout << "Could not create SDL window." << std::endl;
 		return 1;
 	}
+	//End Set SDL and SDL Window
+	
+	//TODO initVulkan(&instance,&physicalDevice,&device, &graphicsQueue);
 
-	// Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
-	unsigned extension_count;
-	if (!SDL_Vulkan_GetInstanceExtensions(window, &extension_count, NULL)) {
-		std::cout << "Could not get the number of required instance extensions from SDL." << std::endl;
-		return 1;
-	}
-	std::vector<const char*> extensions(extension_count);
-	if (!SDL_Vulkan_GetInstanceExtensions(window, &extension_count, extensions.data())) {
-		std::cout << "Could not get the names of required instance extensions from SDL." << std::endl;
-		return 1;
+	//Create Instance
+	if (enableValidationLayers && !checkValidationLayerSupport()) {
+		throw std::runtime_error("validation layers requested, but not available!");
 	}
 
-	//Specify layer Name that need to be enabled on instance
-	instanceInfo.ppEnabledLayerNames=layers.data();
+	VkApplicationInfo appInfo = {};
+	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+	appInfo.pApplicationName = "Hello Triangle";
+	appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+	appInfo.pEngineName = "No Engine";
+	appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+	appInfo.apiVersion = VK_API_VERSION_1_0;
 
-	//Specify extensions that need to be enabled on instance
-	instanceInfo.ppEnabledExtensionNames = extensions.data();
+	VkInstanceCreateInfo InstancecreateInfo = {};
+	InstancecreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	InstancecreateInfo.pApplicationInfo = &appInfo;
 
-	//Create the instance object
-	vkCreateInstance(&instanceInfo, NULL, &instance);
+	auto extensions = getRequiredExtensions();
+	InstancecreateInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+	InstancecreateInfo.ppEnabledExtensionNames = extensions.data();
 
-	/*End Instance Creation*/
+	
+	if (enableValidationLayers) {
+		InstancecreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+		InstancecreateInfo.ppEnabledLayerNames = validationLayers.data();
 
-	/*Enumerate physical devices*/
+	
+	}
+	else {
+		InstancecreateInfo.enabledLayerCount = 0;
 
-	VkPhysicalDevice gpu;
-	uint32_t gpuCount=0;
-	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+		InstancecreateInfo.pNext = nullptr;
+	}
 
-	//Get Number of Gpu Count
-	vkEnumeratePhysicalDevices(instance, &gpuCount, NULL);
+	if (vkCreateInstance(&InstancecreateInfo, nullptr, &instance) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create instance!");
+	}
 
-	if (gpuCount == 0) {
+	//End instance creation
+
+	//pickPhysicalDevice
+
+	uint32_t deviceCount = 0;
+	vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+
+	if (deviceCount == 0) {
 		throw std::runtime_error("failed to find GPUs with Vulkan support!");
 	}
 
-	std::vector<VkPhysicalDevice> devices(gpuCount);
-	
-	//Get Gpu Information
-	vkEnumeratePhysicalDevices(instance, &gpuCount,devices.data());
+	std::vector<VkPhysicalDevice> devices(deviceCount);
+	vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
 	for (const auto& device : devices) {
+		if (isDeviceSuitable(device)) {
 			physicalDevice = device;
 			break;
-		
+		}
 	}
 
 	if (physicalDevice == VK_NULL_HANDLE) {
 		throw std::runtime_error("failed to find a suitable GPU!");
 	}
-	/*End Enumerate physical devices*/
-
-	system("pause");
-
-    return 0;
-}
 
 
+	//end pickPhysicalDevice
 
-//Template Vulkan SDL Backup
-/*// Create an SDL window that supports Vulkan rendering.
-	if(SDL_Init(SDL_INIT_VIDEO) != 0) {
-		std::cout << "Could not initialize SDL." << std::endl;
-		return 1;
+	//createLogicalDevice
+	QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+
+	VkDeviceQueueCreateInfo queueCreateInfo = {};
+	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
+	queueCreateInfo.queueCount = 1;
+
+	float queuePriority = 1.0f;
+	queueCreateInfo.pQueuePriorities = &queuePriority;
+
+	VkPhysicalDeviceFeatures deviceFeatures = {};
+
+	VkDeviceCreateInfo DevicecreateInfo = {};
+	DevicecreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+	DevicecreateInfo.pQueueCreateInfos = &queueCreateInfo;
+	DevicecreateInfo.queueCreateInfoCount = 1;
+
+	DevicecreateInfo.pEnabledFeatures = &deviceFeatures;
+
+	DevicecreateInfo.enabledExtensionCount = 0;
+
+	if (enableValidationLayers) {
+		DevicecreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+		DevicecreateInfo.ppEnabledLayerNames = validationLayers.data();
 	}
-	SDL_Window* window = SDL_CreateWindow("Vulkan Window", SDL_WINDOWPOS_CENTERED,
-		SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_VULKAN);
-	if(window == NULL) {
-		std::cout << "Could not create SDL window." << std::endl;
-		return 1;
-	}
-
-	// Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
-	unsigned extension_count;
-	if(!SDL_Vulkan_GetInstanceExtensions(window, &extension_count, NULL)) {
-		std::cout << "Could not get the number of required instance extensions from SDL." << std::endl;
-		return 1;
-	}
-	std::vector<const char*> extensions(extension_count);
-	if(!SDL_Vulkan_GetInstanceExtensions(window, &extension_count, extensions.data())) {
-		std::cout << "Could not get the names of required instance extensions from SDL." << std::endl;
-		return 1;
-	}
-
-	// Use validation layers if this is a debug build
-	std::vector<const char*> layers;
-#if defined(_DEBUG)
-	layers.push_back("VK_LAYER_LUNARG_standard_validation");
-#endif
-
-	// vk::ApplicationInfo allows the programmer to specifiy some basic information about the
-	// program, which can be useful for layers and tools to provide more debug information.
-	vk::ApplicationInfo appInfo = vk::ApplicationInfo()
-		.setPApplicationName("Vulkan C++ Windowed Program Template")
-		.setApplicationVersion(1)
-		.setPEngineName("LunarG SDK")
-		.setEngineVersion(1)
-		.setApiVersion(VK_API_VERSION_1_0);
-
-	// vk::InstanceCreateInfo is where the programmer specifies the layers and/or extensions that
-	// are needed.
-	vk::InstanceCreateInfo instInfo = vk::InstanceCreateInfo()
-		.setFlags(vk::InstanceCreateFlags())
-		.setPApplicationInfo(&appInfo)
-		.setEnabledExtensionCount(static_cast<uint32_t>(extensions.size()))
-		.setPpEnabledExtensionNames(extensions.data())
-		.setEnabledLayerCount(static_cast<uint32_t>(layers.size()))
-		.setPpEnabledLayerNames(layers.data());
-
-	// Create the Vulkan instance.
-	vk::Instance instance;
-	try {
-		instance = vk::createInstance(instInfo);
-	} catch(const std::exception& e) {
-		std::cout << "Could not create a Vulkan instance: " << e.what() << std::endl;
-		return 1;
+	else {
+		DevicecreateInfo.enabledLayerCount = 0;
 	}
 
-	// Create a Vulkan surface for rendering
-	VkSurfaceKHR c_surface;
-	if(!SDL_Vulkan_CreateSurface(window, static_cast<VkInstance>(instance), &c_surface)) {
-		std::cout << "Could not create a Vulkan surface." << std::endl;
-		return 1;
+	if (vkCreateDevice(physicalDevice, &DevicecreateInfo, nullptr, &device) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create logical device!");
 	}
-	vk::SurfaceKHR surface(c_surface);
 
-	// This is where most initializtion for a program should be performed
+	vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
+
+	//end createLogicalDevice
+	//Main Loop
 
 	// Poll for user input.
 	bool stillRunning = true;
-	while(stillRunning) {
+	while (stillRunning) {
 
 		SDL_Event event;
-		while(SDL_PollEvent(&event)) {
+		while (SDL_PollEvent(&event)) {
 
-			switch(event.type) {
+			switch (event.type) {
 
 			case SDL_QUIT:
 				stillRunning = false;
@@ -244,8 +237,103 @@ int main()
 		SDL_Delay(10);
 	}
 
-	// Clean up.
-	instance.destroySurfaceKHR(surface);
+	//Clean All
+	//TODO cleanup(device, instance);
+	vkDestroyDevice(device, nullptr);
+
+
+	vkDestroyInstance(instance, nullptr);
+
+	
 	SDL_DestroyWindow(window);
 	SDL_Quit();
-	instance.destroy();*/
+	
+	
+
+	return EXIT_SUCCESS;
+}
+
+
+
+
+bool isDeviceSuitable(VkPhysicalDevice device) {
+	QueueFamilyIndices indices = findQueueFamilies(device);
+
+	return indices.isComplete();
+}
+
+QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
+	QueueFamilyIndices indices;
+
+	uint32_t queueFamilyCount = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+	std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+	int i = 0;
+	for (const auto& queueFamily : queueFamilies) {
+		if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+			indices.graphicsFamily = i;
+		}
+
+		if (indices.isComplete()) {
+			break;
+		}
+
+		i++;
+	}
+
+	return indices;
+}
+
+std::vector<const char*> getRequiredExtensions() {
+	uint32_t extension_count = 0;
+
+
+
+	if (!SDL_Vulkan_GetInstanceExtensions(window, &extension_count, NULL)) {
+		std::cout << "Could not get the number of required instance extensions from SDL." << std::endl;
+		exit(1);
+	}
+
+
+	std::vector<const char*> extensions(extension_count);
+
+	if (!SDL_Vulkan_GetInstanceExtensions(window, &extension_count, extensions.data())) {
+		std::cout << "Could not get the names of required instance extensions from SDL." << std::endl;
+		exit(1);
+	}
+
+	if (enableValidationLayers) {
+		extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+	}
+
+	return extensions;
+}
+
+bool checkValidationLayerSupport() {
+	uint32_t layerCount;
+	vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+
+	std::vector<VkLayerProperties> availableLayers(layerCount);
+	vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+	for (const char* layerName : validationLayers) {
+		bool layerFound = false;
+
+		for (const auto& layerProperties : availableLayers) {
+			if (strcmp(layerName, layerProperties.layerName) == 0) {
+				layerFound = true;
+				break;
+			}
+		}
+
+		if (!layerFound) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
