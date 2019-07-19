@@ -17,12 +17,12 @@
  * limitations under the License.
  */
 
-/*
-Vulkan C++ Windowed Project Template
-Create and destroy a Vulkan surface on an SDL window.
-*/
+ /*
+ Vulkan C++ Windowed Project Template
+ Create and destroy a Vulkan surface on an SDL window.
+ */
 
-// Enable the WSI extensions
+ // Enable the WSI extensions
 #if defined(__ANDROID__)
 #define VK_USE_PLATFORM_ANDROID_KHR
 #elif defined(__linux__)
@@ -74,147 +74,38 @@ SDL_Window* window;
 
 
 
-
+int initWindow();
+void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue);
+void createInstance(VkInstance *instance);
+void pickPhysicalDevice(VkInstance *instance, VkPhysicalDevice *physicalDevice);
+void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue);
 bool isDeviceSuitable(VkPhysicalDevice device);
 QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 std::vector<const char*> getRequiredExtensions();
 bool checkValidationLayerSupport();
+void sdlCleanUp(SDL_Window* window);
+void cleanup(VkDevice device, VkInstance instance);
 
 
 
 int main() {
-	
+
 
 	VkInstance instance;
-	
+
 
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-	VkDevice device=NULL;
+	VkDevice device = NULL;
 
-	VkQueue graphicsQueue=NULL;
+	VkQueue graphicsQueue = NULL;
 
-	//TODO initWindow();
-	//Set SDL and SDL WINDOW
-	if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-		std::cout << "Could not initialize SDL." << std::endl;
-		return 1;
-	}
-	window = SDL_CreateWindow("Vulkan Window", SDL_WINDOWPOS_CENTERED,
-		SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_VULKAN);
-	if (window == NULL) {
-		std::cout << "Could not create SDL window." << std::endl;
-		return 1;
-	}
-	//End Set SDL and SDL Window
+	//Init SDL && SDL Window
+	initWindow();
+
+	//Init Vulkan
+	initVulkan(&instance, &physicalDevice, &device, &graphicsQueue);
 	
-	//TODO initVulkan(&instance,&physicalDevice,&device, &graphicsQueue);
-
-	//Create Instance
-	if (enableValidationLayers && !checkValidationLayerSupport()) {
-		throw std::runtime_error("validation layers requested, but not available!");
-	}
-
-	VkApplicationInfo appInfo = {};
-	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	appInfo.pApplicationName = "Hello Triangle";
-	appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-	appInfo.pEngineName = "No Engine";
-	appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-	appInfo.apiVersion = VK_API_VERSION_1_0;
-
-	VkInstanceCreateInfo InstancecreateInfo = {};
-	InstancecreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	InstancecreateInfo.pApplicationInfo = &appInfo;
-
-	auto extensions = getRequiredExtensions();
-	InstancecreateInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-	InstancecreateInfo.ppEnabledExtensionNames = extensions.data();
-
-	
-	if (enableValidationLayers) {
-		InstancecreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-		InstancecreateInfo.ppEnabledLayerNames = validationLayers.data();
-
-	
-	}
-	else {
-		InstancecreateInfo.enabledLayerCount = 0;
-
-		InstancecreateInfo.pNext = nullptr;
-	}
-
-	if (vkCreateInstance(&InstancecreateInfo, nullptr, &instance) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create instance!");
-	}
-
-	//End instance creation
-
-	//pickPhysicalDevice
-
-	uint32_t deviceCount = 0;
-	vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-
-	if (deviceCount == 0) {
-		throw std::runtime_error("failed to find GPUs with Vulkan support!");
-	}
-
-	std::vector<VkPhysicalDevice> devices(deviceCount);
-	vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
-
-	for (const auto& device : devices) {
-		if (isDeviceSuitable(device)) {
-			physicalDevice = device;
-			break;
-		}
-	}
-
-	if (physicalDevice == VK_NULL_HANDLE) {
-		throw std::runtime_error("failed to find a suitable GPU!");
-	}
-
-
-	//end pickPhysicalDevice
-
-	//createLogicalDevice
-	QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-
-	VkDeviceQueueCreateInfo queueCreateInfo = {};
-	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
-	queueCreateInfo.queueCount = 1;
-
-	float queuePriority = 1.0f;
-	queueCreateInfo.pQueuePriorities = &queuePriority;
-
-	VkPhysicalDeviceFeatures deviceFeatures = {};
-
-	VkDeviceCreateInfo DevicecreateInfo = {};
-	DevicecreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-
-	DevicecreateInfo.pQueueCreateInfos = &queueCreateInfo;
-	DevicecreateInfo.queueCreateInfoCount = 1;
-
-	DevicecreateInfo.pEnabledFeatures = &deviceFeatures;
-
-	DevicecreateInfo.enabledExtensionCount = 0;
-
-	if (enableValidationLayers) {
-		DevicecreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-		DevicecreateInfo.ppEnabledLayerNames = validationLayers.data();
-	}
-	else {
-		DevicecreateInfo.enabledLayerCount = 0;
-	}
-
-	if (vkCreateDevice(physicalDevice, &DevicecreateInfo, nullptr, &device) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create logical device!");
-	}
-
-	vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
-
-	//end createLogicalDevice
-	//Main Loop
-
+	//MainLoop
 	// Poll for user input.
 	bool stillRunning = true;
 	while (stillRunning) {
@@ -237,31 +128,157 @@ int main() {
 		SDL_Delay(10);
 	}
 
-	//Clean All
-	//TODO cleanup(device, instance);
-	vkDestroyDevice(device, nullptr);
-
-
-	vkDestroyInstance(instance, nullptr);
-
-	
-	SDL_DestroyWindow(window);
-	SDL_Quit();
-	
-	
+	cleanup(device, instance);
+	sdlCleanUp(window);
 
 	return EXIT_SUCCESS;
 }
 
 
+int initWindow() {
 
 
+	if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+		std::cout << "Could not initialize SDL." << std::endl;
+		return 1;
+	}
+	window = SDL_CreateWindow("Vulkan Window", SDL_WINDOWPOS_CENTERED,
+		SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_VULKAN);
+	if (window == NULL) {
+		std::cout << "Could not create SDL window." << std::endl;
+		return 1;
+	}
+}
+//Init Vulkan
+void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue) {
+	createInstance(instance);
+	
+	pickPhysicalDevice(instance, physicalDevice);
+	createLogicalDevice(physicalDevice, device, graphicsQueue);
+
+}
+
+void sdlCleanUp(SDL_Window* window) {
+	SDL_DestroyWindow(window);
+	SDL_Quit();
+}
+
+void cleanup(VkDevice device, VkInstance instance) {
+	vkDestroyDevice(device, nullptr);
+
+	vkDestroyInstance(instance, nullptr);
+
+}
+//Set instance Vulkan
+void createInstance(VkInstance *instance) {
+	if (enableValidationLayers && !checkValidationLayerSupport()) {
+		throw std::runtime_error("validation layers requested, but not available!");
+	}
+
+	VkApplicationInfo appInfo = {};
+	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+	appInfo.pApplicationName = "Hello Triangle";
+	appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+	appInfo.pEngineName = "No Engine";
+	appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+	appInfo.apiVersion = VK_API_VERSION_1_0;
+
+	VkInstanceCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	createInfo.pApplicationInfo = &appInfo;
+
+	auto extensions = getRequiredExtensions();
+	createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+	createInfo.ppEnabledExtensionNames = extensions.data();
+
+	
+	if (enableValidationLayers) {
+		createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+		createInfo.ppEnabledLayerNames = validationLayers.data();
+
+	}
+	else {
+		createInfo.enabledLayerCount = 0;
+
+		createInfo.pNext = nullptr;
+	}
+
+	if (vkCreateInstance(&createInfo, nullptr, instance) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create instance!");
+	}
+}
+
+//Select Appropriate Device(GPU compatible)
+void pickPhysicalDevice(VkInstance *instance, VkPhysicalDevice *physicalDevice) {
+	uint32_t deviceCount = 0;
+	vkEnumeratePhysicalDevices(*instance, &deviceCount, nullptr);
+
+	if (deviceCount == 0) {
+		throw std::runtime_error("failed to find GPUs with Vulkan support!");
+	}
+
+	std::vector<VkPhysicalDevice> devices(deviceCount);
+	vkEnumeratePhysicalDevices(*instance, &deviceCount, devices.data());
+
+	for (const auto& device : devices) {
+		if (isDeviceSuitable(device)) {
+			*physicalDevice = device;
+			break;
+		}
+	}
+
+	if (physicalDevice == VK_NULL_HANDLE) {
+		throw std::runtime_error("failed to find a suitable GPU!");
+	}
+}
+
+//Create logical Device who take instruction
+void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue) {
+	QueueFamilyIndices indices = findQueueFamilies(*physicalDevice);
+
+	VkDeviceQueueCreateInfo queueCreateInfo = {};
+	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
+	queueCreateInfo.queueCount = 1;
+
+	float queuePriority = 1.0f;
+	queueCreateInfo.pQueuePriorities = &queuePriority;
+
+	VkPhysicalDeviceFeatures deviceFeatures = {};
+
+	VkDeviceCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+	createInfo.pQueueCreateInfos = &queueCreateInfo;
+	createInfo.queueCreateInfoCount = 1;
+
+	createInfo.pEnabledFeatures = &deviceFeatures;
+
+	createInfo.enabledExtensionCount = 0;
+
+	if (enableValidationLayers) {
+		createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+		createInfo.ppEnabledLayerNames = validationLayers.data();
+	}
+	else {
+		createInfo.enabledLayerCount = 0;
+	}
+
+	if (vkCreateDevice(*physicalDevice, &createInfo, nullptr, device) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create logical device!");
+	}
+
+	vkGetDeviceQueue(*device, indices.graphicsFamily.value(), 0, graphicsQueue);
+}
+
+//if device is compatible
 bool isDeviceSuitable(VkPhysicalDevice device) {
 	QueueFamilyIndices indices = findQueueFamilies(device);
 
 	return indices.isComplete();
 }
 
+//Queue of device instruction if compatible
 QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
 	QueueFamilyIndices indices;
 
@@ -287,6 +304,7 @@ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
 	return indices;
 }
 
+//Get sdl extension for Vulkan Instance
 std::vector<const char*> getRequiredExtensions() {
 	uint32_t extension_count = 0;
 
@@ -311,7 +329,7 @@ std::vector<const char*> getRequiredExtensions() {
 
 	return extensions;
 }
-
+//If valid Layers
 bool checkValidationLayerSupport() {
 	uint32_t layerCount;
 	vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
