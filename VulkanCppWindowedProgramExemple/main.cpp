@@ -53,6 +53,13 @@ const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
 };
 
+const std::vector<const char*> deviceExtensions = {
+	VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
+
+
+
+const 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
 #else
@@ -278,7 +285,7 @@ void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQ
 	
 
 	float queuePriority = 1.0f;
-	//queueCreateInfo.pQueuePriorities = &queuePriority;
+	
 	for(uint32_t queueFamily : uniqueQueueFamilies) {
 		VkDeviceQueueCreateInfo queueCreateInfo = {};
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -300,7 +307,9 @@ void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQ
 
 	createInfo.pEnabledFeatures = &deviceFeatures;
 
-	createInfo.enabledExtensionCount = 0;
+	
+	createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+	createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
 	if (enableValidationLayers) {
 		createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
@@ -332,12 +341,30 @@ int createSurface(SDL_Window* window, VkInstance instance, VkSurfaceKHR *surface
 
 }
 
+bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
+
+	uint32_t extensionCount;
+	vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+
+	std::vector<VkExtensionProperties> avaibleExtensions(extensionCount);
+	vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, avaibleExtensions.data());
+
+	std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+
+	for (const auto &extension : avaibleExtensions) {
+		requiredExtensions.erase(extension.extensionName);
+	}
+	return requiredExtensions.empty();
+}
 
 //if device is compatible
 bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, VkBool32 *presentSupport) {
 	QueueFamilyIndices indices = findQueueFamilies(device,surface,presentSupport);
 
-	return indices.isComplete();
+	bool extensionSupported = checkDeviceExtensionSupport(device);
+
+
+	return indices.isComplete()&&extensionSupported;
 }
 
 //Queue of device instruction if compatible
