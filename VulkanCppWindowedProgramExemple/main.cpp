@@ -44,6 +44,7 @@
 #include <iostream>
 #include <vector>
 #include<string>
+#include<set>
 
 const int WIDTH = 800;
 const int HEIGHT = 600;
@@ -77,10 +78,10 @@ VkDebugUtilsMessengerEXT debugMessenger;
 
 
 int initWindow();
-void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport);
+void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue);
 void createInstance(VkInstance *instance);
 void pickPhysicalDevice(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkSurfaceKHR surface, VkBool32 *presentSupport);
-void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport); 
+void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue);
 bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, VkBool32 *presentSupport);
 QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface, VkBool32 *presentSupport);
 std::vector<const char*> getRequiredExtensions();
@@ -111,8 +112,11 @@ int main() {
 
 	VkSurfaceKHR surface=NULL;
 	VkBool32 presentSupport = false;
+
+	VkQueue presentQueue;
+
 	//Init Vulkan
-	initVulkan(&instance, &physicalDevice, &device, &graphicsQueue, surface, &presentSupport);
+	initVulkan(&instance, &physicalDevice, &device, &graphicsQueue, surface, &presentSupport,&presentQueue);
 
 	//TODO queue presentation
 	
@@ -172,12 +176,12 @@ int initWindow() {
 }
 
 //Init Vulkan
-void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport) {
+void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue) {
 	createInstance(instance);
 	setupDebugMessenger(instance);
 	createSurface(window, *instance, &surface);
 	pickPhysicalDevice(instance, physicalDevice,surface,presentSupport);
-	createLogicalDevice(physicalDevice, device, graphicsQueue,surface, presentSupport);
+	createLogicalDevice(physicalDevice, device, graphicsQueue,surface, presentSupport, presentQueue);
 
 }
 
@@ -265,24 +269,34 @@ void pickPhysicalDevice(VkInstance *instance, VkPhysicalDevice *physicalDevice, 
 }
 
 //Create logical Device who take instruction
-void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport) {
+void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue) {
 	QueueFamilyIndices indices = findQueueFamilies(*physicalDevice, surface, presentSupport);
 
-	VkDeviceQueueCreateInfo queueCreateInfo = {};
-	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
-	queueCreateInfo.queueCount = 1;
+
+	std::vector<VkDeviceQueueCreateInfo>queueCreateInfos;
+	std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(),indices.presentFamily.value() };
+	
 
 	float queuePriority = 1.0f;
-	queueCreateInfo.pQueuePriorities = &queuePriority;
+	//queueCreateInfo.pQueuePriorities = &queuePriority;
+	for(uint32_t queueFamily : uniqueQueueFamilies) {
+		VkDeviceQueueCreateInfo queueCreateInfo = {};
+		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queueCreateInfo.queueFamilyIndex =queueFamily;
+		queueCreateInfo.queueCount = 1;
+		queueCreateInfo.pQueuePriorities = &queuePriority;
+		queueCreateInfos.push_back(queueCreateInfo);
+
+	}
 
 	VkPhysicalDeviceFeatures deviceFeatures = {};
 
 	VkDeviceCreateInfo createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
-	createInfo.pQueueCreateInfos = &queueCreateInfo;
-	createInfo.queueCreateInfoCount = 1;
+	createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
+	createInfo.pQueueCreateInfos = queueCreateInfos.data();
+	
 
 	createInfo.pEnabledFeatures = &deviceFeatures;
 
@@ -301,6 +315,7 @@ void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQ
 	}
 
 	vkGetDeviceQueue(*device, indices.graphicsFamily.value(), 0, graphicsQueue);
+	vkGetDeviceQueue(*device, indices.graphicsFamily.value(), 0, presentQueue);
 }
 
 
