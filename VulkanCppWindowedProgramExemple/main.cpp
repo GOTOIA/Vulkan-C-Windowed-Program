@@ -77,6 +77,12 @@ struct QueueFamilyIndices {
 	}
 };
 
+struct SwapChainSupportDetails {
+	VkSurfaceCapabilitiesKHR capabilities;
+	std::vector<VkSurfaceFormatKHR> formats;
+	std::vector<VkPresentModeKHR>presentsModes;
+};
+
 
 //Global
 SDL_Window* window;
@@ -101,6 +107,9 @@ void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& create
 void setupDebugMessenger(VkInstance *instance);
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
 int createSurface(SDL_Window* window, VkInstance instance, VkSurfaceKHR *surface);
+SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
+
+
 
 
 int main() {
@@ -125,7 +134,7 @@ int main() {
 	//Init Vulkan
 	initVulkan(&instance, &physicalDevice, &device, &graphicsQueue, surface, &presentSupport,&presentQueue);
 
-	//TODO queue presentation
+	//TODO choose swap chain parameters
 	
 
 
@@ -341,6 +350,32 @@ int createSurface(SDL_Window* window, VkInstance instance, VkSurfaceKHR *surface
 
 }
 
+SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface)
+{
+	SwapChainSupportDetails details;
+
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+	
+	uint32_t formatCount;
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
+
+	if (formatCount != 0) {
+		details.formats.resize(formatCount);
+		vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
+
+	}
+
+	uint32_t presentModeCount;
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
+
+	if (presentModeCount != 0) {
+		details.presentsModes.resize(presentModeCount);
+		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentsModes.data());
+	}
+
+	return  details;
+}
+
 bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
 
 	uint32_t extensionCount;
@@ -363,8 +398,15 @@ bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, VkBool32 *p
 
 	bool extensionSupported = checkDeviceExtensionSupport(device);
 
-
-	return indices.isComplete()&&extensionSupported;
+	bool swapChainAdequate = false;
+	
+	//test If surface compatible with swap chain extension
+	if (extensionSupported) {
+		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device,surface);
+		swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentsModes.empty();
+	}
+		
+	return indices.isComplete()&&extensionSupported&&swapChainAdequate;
 }
 
 //Queue of device instruction if compatible
