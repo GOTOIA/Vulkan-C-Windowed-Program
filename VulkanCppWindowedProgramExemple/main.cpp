@@ -62,9 +62,10 @@ const bool enableValidationLayers = true;
 
 struct QueueFamilyIndices {
 	std::optional<uint32_t> graphicsFamily;
+	std::optional<uint32_t> presentFamily;
 
 	bool isComplete() {
-		return graphicsFamily.has_value();
+		return graphicsFamily.has_value() && presentFamily.has_value();
 	}
 };
 
@@ -76,12 +77,12 @@ VkDebugUtilsMessengerEXT debugMessenger;
 
 
 int initWindow();
-void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue);
+void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport);
 void createInstance(VkInstance *instance);
-void pickPhysicalDevice(VkInstance *instance, VkPhysicalDevice *physicalDevice);
-void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue);
-bool isDeviceSuitable(VkPhysicalDevice device);
-QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
+void pickPhysicalDevice(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkSurfaceKHR surface, VkBool32 *presentSupport);
+void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport); 
+bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, VkBool32 *presentSupport);
+QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface, VkBool32 *presentSupport);
 std::vector<const char*> getRequiredExtensions();
 bool checkValidationLayerSupport();
 void sdlCleanUp(SDL_Window* window);
@@ -91,7 +92,7 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
 void setupDebugMessenger(VkInstance *instance);
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
-
+int createSurface(SDL_Window* window, VkInstance instance, VkSurfaceKHR *surface);
 
 
 int main() {
@@ -108,8 +109,17 @@ int main() {
 	//Init SDL && SDL Window
 	initWindow();
 
+	VkSurfaceKHR surface=NULL;
+	VkBool32 presentSupport = false;
 	//Init Vulkan
-	initVulkan(&instance, &physicalDevice, &device, &graphicsQueue);
+	initVulkan(&instance, &physicalDevice, &device, &graphicsQueue, surface, &presentSupport);
+
+	//TODO queue presentation
+	
+
+
+	
+
 	
 	//MainLoop
 	// Poll for user input.
@@ -134,6 +144,9 @@ int main() {
 		SDL_Delay(10);
 	}
 
+	
+	
+	vkDestroySurfaceKHR(instance,surface,nullptr);
 	cleanup(device, instance);
 	sdlCleanUp(window);
 
@@ -154,13 +167,17 @@ int initWindow() {
 		std::cout << "Could not create SDL window." << std::endl;
 		return 1;
 	}
+
+	return 0;
 }
+
 //Init Vulkan
-void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue) {
+void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport) {
 	createInstance(instance);
 	setupDebugMessenger(instance);
-	pickPhysicalDevice(instance, physicalDevice);
-	createLogicalDevice(physicalDevice, device, graphicsQueue);
+	createSurface(window, *instance, &surface);
+	pickPhysicalDevice(instance, physicalDevice,surface,presentSupport);
+	createLogicalDevice(physicalDevice, device, graphicsQueue,surface, presentSupport);
 
 }
 
@@ -223,7 +240,7 @@ void createInstance(VkInstance *instance) {
 }
 
 //Select Appropriate Device(GPU compatible)
-void pickPhysicalDevice(VkInstance *instance, VkPhysicalDevice *physicalDevice) {
+void pickPhysicalDevice(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkSurfaceKHR surface, VkBool32 *presentSupport) {
 	uint32_t deviceCount = 0;
 	vkEnumeratePhysicalDevices(*instance, &deviceCount, nullptr);
 
@@ -235,7 +252,8 @@ void pickPhysicalDevice(VkInstance *instance, VkPhysicalDevice *physicalDevice) 
 	vkEnumeratePhysicalDevices(*instance, &deviceCount, devices.data());
 
 	for (const auto& device : devices) {
-		if (isDeviceSuitable(device)) {
+		
+		if (isDeviceSuitable(device,surface, presentSupport)) {
 			*physicalDevice = device;
 			break;
 		}
@@ -247,8 +265,8 @@ void pickPhysicalDevice(VkInstance *instance, VkPhysicalDevice *physicalDevice) 
 }
 
 //Create logical Device who take instruction
-void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue) {
-	QueueFamilyIndices indices = findQueueFamilies(*physicalDevice);
+void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport) {
+	QueueFamilyIndices indices = findQueueFamilies(*physicalDevice, surface, presentSupport);
 
 	VkDeviceQueueCreateInfo queueCreateInfo = {};
 	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -285,15 +303,30 @@ void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQ
 	vkGetDeviceQueue(*device, indices.graphicsFamily.value(), 0, graphicsQueue);
 }
 
+
+//Create presentation
+int createSurface(SDL_Window* window, VkInstance instance, VkSurfaceKHR *surface)
+{
+	if (!SDL_Vulkan_CreateSurface(window, static_cast<VkInstance>(instance), surface)) {
+		std::cout << "Could not create a Vulkan surface." << std::endl;
+		return 1;
+	}
+
+	return 0;
+
+
+}
+
+
 //if device is compatible
-bool isDeviceSuitable(VkPhysicalDevice device) {
-	QueueFamilyIndices indices = findQueueFamilies(device);
+bool isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface, VkBool32 *presentSupport) {
+	QueueFamilyIndices indices = findQueueFamilies(device,surface,presentSupport);
 
 	return indices.isComplete();
 }
 
 //Queue of device instruction if compatible
-QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
+QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface, VkBool32 *presentSupport) {
 	QueueFamilyIndices indices;
 
 	uint32_t queueFamilyCount = 0;
@@ -306,6 +339,11 @@ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
 	for (const auto& queueFamily : queueFamilies) {
 		if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
 			indices.graphicsFamily = i;
+		}
+		//provided presentation support
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, presentSupport);
+		if (queueFamily.queueCount > 0 && presentSupport) {
+			indices.presentFamily = i;
 		}
 
 		if (indices.isComplete()) {
@@ -374,6 +412,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 
 	return VK_FALSE;
 }
+
+
 
 void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
 	createInfo = {};
