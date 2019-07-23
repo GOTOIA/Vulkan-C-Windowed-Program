@@ -108,7 +108,7 @@ void setupDebugMessenger(VkInstance *instance);
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
 int createSurface(SDL_Window* window, VkInstance instance, VkSurfaceKHR *surface);
 SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
-
+VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>&availableFormats);
 
 
 
@@ -198,7 +198,8 @@ void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice
 	createSurface(window, *instance, &surface);
 	pickPhysicalDevice(instance, physicalDevice,surface,presentSupport);
 	createLogicalDevice(physicalDevice, device, graphicsQueue,surface, presentSupport, presentQueue);
-
+	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(*physicalDevice, surface);
+	chooseSwapSurfaceFormat(swapChainSupport.formats);
 }
 
 void sdlCleanUp(SDL_Window* window) {
@@ -374,6 +375,18 @@ SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurface
 	}
 
 	return  details;
+}
+
+VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>&availableFormats) {
+
+	for (const auto& availableFormat : availableFormats) {
+		if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+			return availableFormat;
+
+		}
+	}
+
+	return availableFormats[0];
 }
 
 bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
