@@ -109,7 +109,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
 int createSurface(SDL_Window* window, VkInstance instance, VkSurfaceKHR *surface);
 SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
 VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>&availableFormats);
-
+VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes);
 
 
 int main() {
@@ -200,6 +200,7 @@ void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice
 	createLogicalDevice(physicalDevice, device, graphicsQueue,surface, presentSupport, presentQueue);
 	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(*physicalDevice, surface);
 	chooseSwapSurfaceFormat(swapChainSupport.formats);
+	chooseSwapPresentMode(swapChainSupport.presentsModes);
 }
 
 void sdlCleanUp(SDL_Window* window) {
@@ -387,6 +388,18 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>
 	}
 
 	return availableFormats[0];
+}
+
+VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes) {
+	
+	for (const auto& availablePresentMode : availablePresentModes) {
+		if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+			return availablePresentMode;
+		}
+	}
+
+	return VK_PRESENT_MODE_FIFO_KHR;
+
 }
 
 bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
