@@ -31,8 +31,12 @@
 #define VK_USE_PLATFORM_WIN32_KHR
 #endif
 
+
+
 // Tell SDL not to mess with main()
 #define SDL_MAIN_HANDLED
+#define NOMINMAX //Disable min(a,b) et max(a,b), bug fix std::min  and std::max
+
 
 #include <glm/glm.hpp>
 #include <SDL2/SDL.h>
@@ -40,11 +44,15 @@
 #include <SDL2/SDL_vulkan.h>
 #include <vulkan/vulkan.hpp>
 
-#include <optional>
 #include <iostream>
+#include <algorithm>
+#include <optional>
 #include <vector>
-#include<string>
-#include<set>
+#include <string>
+#include <set>
+
+
+
 
 const int WIDTH = 800;
 const int HEIGHT = 600;
@@ -68,6 +76,7 @@ const bool enableValidationLayers = true;
 
 
 
+
 struct QueueFamilyIndices {
 	std::optional<uint32_t> graphicsFamily;
 	std::optional<uint32_t> presentFamily;
@@ -87,11 +96,13 @@ struct SwapChainSupportDetails {
 //Global
 SDL_Window* window;
 VkDebugUtilsMessengerEXT debugMessenger;
+VkFormat swapChainImageFormat;
+VkExtent2D swapChainExtent;
 
 
 
 int initWindow();
-void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue);
+void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue, VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages);
 void createInstance(VkInstance *instance);
 void pickPhysicalDevice(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkSurfaceKHR surface, VkBool32 *presentSupport);
 void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue);
@@ -100,7 +111,7 @@ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surfa
 std::vector<const char*> getRequiredExtensions();
 bool checkValidationLayerSupport();
 void sdlCleanUp(SDL_Window* window);
-void cleanup(VkDevice device, VkInstance instance);
+void cleanup(VkDevice device, VkInstance instance, VkSwapchainKHR swapChain);
 VkResult CreateDebugUtilsMessengerEXT(VkInstance *instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger);
 void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
 void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
@@ -110,7 +121,8 @@ int createSurface(SDL_Window* window, VkInstance instance, VkSurfaceKHR *surface
 SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
 VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>&availableFormats);
 VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes);
-
+VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
+void createSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages);
 
 int main() {
 
@@ -131,8 +143,11 @@ int main() {
 
 	VkQueue presentQueue;
 
+	VkSwapchainKHR swapChain; 
+	std::vector<VkImage> swapChainImages;
+
 	//Init Vulkan
-	initVulkan(&instance, &physicalDevice, &device, &graphicsQueue, surface, &presentSupport,&presentQueue);
+	initVulkan(&instance, &physicalDevice, &device, &graphicsQueue, surface, &presentSupport,&presentQueue, &swapChain, swapChainImages);
 
 	//TODO choose swap chain parameters
 	
@@ -167,7 +182,7 @@ int main() {
 	
 	
 	vkDestroySurfaceKHR(instance,surface,nullptr);
-	cleanup(device, instance);
+	cleanup(device, instance, swapChain);
 	sdlCleanUp(window);
 
 	return EXIT_SUCCESS;
@@ -192,15 +207,13 @@ int initWindow() {
 }
 
 //Init Vulkan
-void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue) {
+void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue, VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages) {
 	createInstance(instance);
 	setupDebugMessenger(instance);
 	createSurface(window, *instance, &surface);
 	pickPhysicalDevice(instance, physicalDevice,surface,presentSupport);
 	createLogicalDevice(physicalDevice, device, graphicsQueue,surface, presentSupport, presentQueue);
-	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(*physicalDevice, surface);
-	chooseSwapSurfaceFormat(swapChainSupport.formats);
-	chooseSwapPresentMode(swapChainSupport.presentsModes);
+	createSwapChain(*physicalDevice, surface, *presentSupport, *device, swapChain, swapChainImages);
 }
 
 void sdlCleanUp(SDL_Window* window) {
@@ -208,7 +221,8 @@ void sdlCleanUp(SDL_Window* window) {
 	SDL_Quit();
 }
 
-void cleanup(VkDevice device, VkInstance instance) {
+void cleanup(VkDevice device, VkInstance instance, VkSwapchainKHR swapChain) {
+	vkDestroySwapchainKHR(device, swapChain, nullptr);
 	vkDestroyDevice(device, nullptr);
 
 	if (enableValidationLayers) {
@@ -402,6 +416,77 @@ VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &avai
 
 }
 
+VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
+	if (capabilities.currentExtent.width == WIDTH) {
+		return capabilities.currentExtent;
+		
+	}
+	else {
+		VkExtent2D actualExtent = { WIDTH,HEIGHT };
+		actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
+		actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
+		
+		return actualExtent;
+	}
+
+}
+
+
+void createSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages) {
+
+	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice, surface);
+	
+	VkSurfaceFormatKHR surfaceFormat=chooseSwapSurfaceFormat(swapChainSupport.formats);
+	VkPresentModeKHR presentMode=chooseSwapPresentMode(swapChainSupport.presentsModes);
+	VkExtent2D extent=chooseSwapExtent(swapChainSupport.capabilities);
+
+	uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+	if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
+		imageCount = swapChainSupport.capabilities.maxImageCount;
+	}
+
+	VkSwapchainCreateInfoKHR createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	createInfo.surface = surface;
+
+	createInfo.minImageCount = imageCount;
+	createInfo.imageFormat = surfaceFormat.format;
+	createInfo.imageColorSpace = surfaceFormat.colorSpace;
+	createInfo.imageExtent = extent;
+	createInfo.imageArrayLayers = 1;
+	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+	QueueFamilyIndices indices = findQueueFamilies(physicalDevice,surface,&presentSupport);
+	uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+
+	if (indices.graphicsFamily != indices.presentFamily) {
+		createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+		createInfo.queueFamilyIndexCount = 2;
+		createInfo.pQueueFamilyIndices = queueFamilyIndices;
+	}
+	else {
+		createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	}
+
+	createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	createInfo.presentMode = presentMode;
+	createInfo.clipped = VK_TRUE;
+
+	createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+	if (vkCreateSwapchainKHR(device, &createInfo, nullptr, swapChain) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create swap chain!");
+	}
+
+	vkGetSwapchainImagesKHR(device, *swapChain, &imageCount, nullptr);
+	swapChainImages.resize(imageCount);
+	vkGetSwapchainImagesKHR(device, *swapChain, &imageCount, swapChainImages.data());
+
+	swapChainImageFormat = surfaceFormat.format;
+	swapChainExtent = extent;
+}
+
 bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
 
 	uint32_t extensionCount;
@@ -543,7 +628,6 @@ void setupDebugMessenger(VkInstance *instance) {
 		throw std::runtime_error("failed to set up debug messenger!");
 	}
 }
-
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance *instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
 	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(*instance, "vkCreateDebugUtilsMessengerEXT");
