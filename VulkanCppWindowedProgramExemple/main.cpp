@@ -50,6 +50,7 @@
 #include <vector>
 #include <string>
 #include <set>
+#include "ShaderFile.h"
 
 
 
@@ -124,7 +125,7 @@ VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &avai
 VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 void createSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages);
 void createImageViews(VkDevice device, std::vector<VkImageView> swapChainImageViews, std::vector<VkImage> swapChainImages);
-
+void createGraphicsPipeline();
 
 
 
@@ -162,7 +163,7 @@ int main() {
 	//Init Vulkan
 	initVulkan(&instance, &physicalDevice, &device, &graphicsQueue, surface, &presentSupport,&presentQueue, &swapChain, swapChainImages, swapChainImageViews);
 
-	//TODO choose swap chain parameters
+
 	
 
 
@@ -228,7 +229,7 @@ void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice
 	createLogicalDevice(physicalDevice, device, graphicsQueue,surface, presentSupport, presentQueue);
 	createSwapChain(*physicalDevice, surface, *presentSupport, *device, swapChain, swapChainImages);
 	createImageViews(*device, swapChainImageViews, swapChainImages);
-
+	createGraphicsPipeline();
 }
 
 void sdlCleanUp(SDL_Window* window) {
@@ -647,12 +648,20 @@ void createImageViews(VkDevice device,std::vector<VkImageView> swapChainImageVie
 		createInfo.subresourceRange.layerCount = 1;
 
 		if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
-			throw std::runtime_error("Echec de la création d'une image View1");
+			throw std::runtime_error("Failed to create ImageView");
 		}
 		
 
 	}
 
+}
+
+void createGraphicsPipeline() {
+	
+	auto vertShaderCode = readfile("shaders/vert.spv");
+	auto fragShaderCode = readfile("shaders/frag.spv");
+
+	//TODO Creating Shader modules
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
