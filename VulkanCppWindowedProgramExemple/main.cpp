@@ -102,7 +102,7 @@ VkExtent2D swapChainExtent;
 
 
 int initWindow();
-void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue, VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages);
+void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue, VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages, std::vector<VkImageView> swapChainImageViews);
 void createInstance(VkInstance *instance);
 void pickPhysicalDevice(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkSurfaceKHR surface, VkBool32 *presentSupport);
 void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue);
@@ -111,7 +111,7 @@ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surfa
 std::vector<const char*> getRequiredExtensions();
 bool checkValidationLayerSupport();
 void sdlCleanUp(SDL_Window* window);
-void cleanup(VkDevice device, VkInstance instance, VkSwapchainKHR swapChain);
+void cleanup(VkDevice device, VkInstance instance, VkSwapchainKHR swapChain, std::vector<VkImageView> swapChainImageViews);
 VkResult CreateDebugUtilsMessengerEXT(VkInstance *instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger);
 void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
 void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
@@ -123,31 +123,44 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>
 VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes);
 VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 void createSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages);
+void createImageViews(VkDevice device, std::vector<VkImageView> swapChainImageViews, std::vector<VkImage> swapChainImages);
+
+
+
 
 int main() {
 
-
+	//Instance Vulkan
 	VkInstance instance;
 
-
+	//Instance for physicaDevice (GPU)
 	VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+
+	//Instance for logical Device
 	VkDevice device = NULL;
 
+	//Instance of queue for graphics commande 
 	VkQueue graphicsQueue = NULL;
 
 	//Init SDL && SDL Window
 	initWindow();
 
+	//Instance for window surface 
 	VkSurfaceKHR surface=NULL;
 	VkBool32 presentSupport = false;
 
+	//Instance of queue for graphics commande 
 	VkQueue presentQueue;
 
+	//Instance for swap chain
 	VkSwapchainKHR swapChain; 
 	std::vector<VkImage> swapChainImages;
 
+	//Instance for image view
+	std::vector<VkImageView> swapChainImageViews;
+
 	//Init Vulkan
-	initVulkan(&instance, &physicalDevice, &device, &graphicsQueue, surface, &presentSupport,&presentQueue, &swapChain, swapChainImages);
+	initVulkan(&instance, &physicalDevice, &device, &graphicsQueue, surface, &presentSupport,&presentQueue, &swapChain, swapChainImages, swapChainImageViews);
 
 	//TODO choose swap chain parameters
 	
@@ -182,7 +195,7 @@ int main() {
 	
 	
 	vkDestroySurfaceKHR(instance,surface,nullptr);
-	cleanup(device, instance, swapChain);
+	cleanup(device, instance, swapChain, swapChainImageViews);
 	sdlCleanUp(window);
 
 	return EXIT_SUCCESS;
@@ -207,13 +220,15 @@ int initWindow() {
 }
 
 //Init Vulkan
-void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue, VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages) {
+void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue, VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages, std::vector<VkImageView> swapChainImageViews) {
 	createInstance(instance);
 	setupDebugMessenger(instance);
 	createSurface(window, *instance, &surface);
 	pickPhysicalDevice(instance, physicalDevice,surface,presentSupport);
 	createLogicalDevice(physicalDevice, device, graphicsQueue,surface, presentSupport, presentQueue);
 	createSwapChain(*physicalDevice, surface, *presentSupport, *device, swapChain, swapChainImages);
+	createImageViews(*device, swapChainImageViews, swapChainImages);
+
 }
 
 void sdlCleanUp(SDL_Window* window) {
@@ -221,7 +236,12 @@ void sdlCleanUp(SDL_Window* window) {
 	SDL_Quit();
 }
 
-void cleanup(VkDevice device, VkInstance instance, VkSwapchainKHR swapChain) {
+void cleanup(VkDevice device, VkInstance instance, VkSwapchainKHR swapChain, std::vector<VkImageView> swapChainImageViews) {
+	
+	for (auto imageView : swapChainImageViews) {
+		vkDestroyImageView(device, imageView, nullptr);
+	}
+
 	vkDestroySwapchainKHR(device, swapChain, nullptr);
 	vkDestroyDevice(device, nullptr);
 
@@ -431,7 +451,7 @@ VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
 
 }
 
-
+//Create Swap Chain (buffer of rendu "frameBuffer")
 void createSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages) {
 
 	SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice, surface);
@@ -576,6 +596,7 @@ std::vector<const char*> getRequiredExtensions() {
 
 	return extensions;
 }
+
 //If valid Layers
 bool checkValidationLayerSupport() {
 	uint32_t layerCount;
@@ -600,6 +621,38 @@ bool checkValidationLayerSupport() {
 	}
 
 	return true;
+}
+
+//Create ImageViews
+void createImageViews(VkDevice device,std::vector<VkImageView> swapChainImageViews, std::vector<VkImage> swapChainImages) {
+
+	swapChainImageViews.resize(swapChainImages.size());
+
+	for (size_t i = 0; i < swapChainImages.size(); i++) {
+
+		VkImageViewCreateInfo createInfo = {};
+		createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		createInfo.image = swapChainImages[i];
+		createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		createInfo.format = swapChainImageFormat;
+		createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+		createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+		createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		createInfo.subresourceRange.baseMipLevel = 0;
+		createInfo.subresourceRange.levelCount = 1;
+		createInfo.subresourceRange.baseArrayLayer = 0;
+		createInfo.subresourceRange.layerCount = 1;
+
+		if (vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
+			throw std::runtime_error("Echec de la création d'une image View1");
+		}
+		
+
+	}
+
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
