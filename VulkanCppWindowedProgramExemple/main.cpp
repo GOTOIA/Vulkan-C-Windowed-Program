@@ -125,8 +125,8 @@ VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &avai
 VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 void createSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages);
 void createImageViews(VkDevice device, std::vector<VkImageView> swapChainImageViews, std::vector<VkImage> swapChainImages);
-void createGraphicsPipeline();
-
+void createGraphicsPipeline(VkDevice device);
+VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code);
 
 
 int main() {
@@ -229,7 +229,7 @@ void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice
 	createLogicalDevice(physicalDevice, device, graphicsQueue,surface, presentSupport, presentQueue);
 	createSwapChain(*physicalDevice, surface, *presentSupport, *device, swapChain, swapChainImages);
 	createImageViews(*device, swapChainImageViews, swapChainImages);
-	createGraphicsPipeline();
+	createGraphicsPipeline(*device);
 }
 
 void sdlCleanUp(SDL_Window* window) {
@@ -656,12 +656,50 @@ void createImageViews(VkDevice device,std::vector<VkImageView> swapChainImageVie
 
 }
 
-void createGraphicsPipeline() {
+void createGraphicsPipeline(VkDevice device) {
+	
 	
 	auto vertShaderCode = readfile("shaders/vert.spv");
 	auto fragShaderCode = readfile("shaders/frag.spv");
 
-	//TODO Creating Shader modules
+	
+
+	VkShaderModule vertShaderModule = createShaderModule(device, vertShaderCode);
+	VkShaderModule fragShaderModule = createShaderModule(device, fragShaderCode);
+
+	VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
+	vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+	vertShaderStageInfo.module = vertShaderModule;
+	vertShaderStageInfo.pName = "main";
+
+	VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
+	fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	fragShaderStageInfo.module = fragShaderModule;
+	fragShaderStageInfo.pName = "main";
+
+	VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+
+	vkDestroyShaderModule(device, fragShaderModule, nullptr);
+	vkDestroyShaderModule(device, vertShaderModule, nullptr);
+}
+
+VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code) {
+
+	VkShaderModuleCreateInfo createInfo = {};
+	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	createInfo.codeSize = code.size();
+	createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+	VkShaderModule shaderModule;
+	if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+		throw std::runtime_error("Failed to create shader module");
+	}
+
+	return shaderModule;
+
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {
