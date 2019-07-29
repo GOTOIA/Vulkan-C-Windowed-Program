@@ -147,7 +147,7 @@ void createRenderPass(VkDevice device);
 void createFrameBuffers(VkDevice device);
 void createCommandPool(VkPhysicalDevice *physicalDevice, VkDevice *device, VkSurfaceKHR surface, VkBool32 *presentSupport);
 void createCommandeBuffers(VkDevice device);
-void createSemaphores(VkDevice device);
+void createSyncObjects(VkDevice device);
 void drawFrame(VkDevice device, VkSwapchainKHR swapChain, VkQueue graphicsQueue, VkQueue presentQueue);
 
 
@@ -255,7 +255,7 @@ void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice
 	createFrameBuffers(*device);
 	createCommandPool(physicalDevice, device, surface, presentSupport);
 	createCommandeBuffers(*device);
-	createSemaphores(*device);
+	createSyncObjects(*device);
 }
 
 void sdlCleanUp(SDL_Window* window) {
@@ -269,6 +269,7 @@ void cleanup(VkDevice device, VkInstance instance, VkSurfaceKHR surface, VkSwapc
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 		vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
 		vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
+		vkDestroyFence(device, inFlightFences[i], nullptr);
 	}
 	
 
@@ -481,7 +482,8 @@ VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &avai
 }
 
 VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
-	if (capabilities.currentExtent.width == WIDTH) {
+	if (capabilities.currentExtent.width == std::numeric_limits<uint32_t>::max()) {
+	//if(capabilities.currentExtent.width==WIDTH){
 		return capabilities.currentExtent;
 		
 	}
@@ -950,18 +952,25 @@ void createCommandeBuffers(VkDevice device) {
 
 }
 //Frames  in flight, max work with 2 frames
-//Synchronisation GPU // Work 
-void createSemaphores(VkDevice device) {
+//Synchronisation GPU //CPU work use VkFence //Rename createSemaphores=>createSyncObject
+void createSyncObjects(VkDevice device) {
 
 	imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 	renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+	inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
 	VkSemaphoreCreateInfo semaphoreInfo = {};
 	semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
+	VkFenceCreateInfo fenceInfo = {};
+	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 		if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
-			vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS) {
+			vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS||
+			vkCreateFence(device,&fenceInfo,nullptr,&inFlightFences[i])!=VK_SUCCESS)
+		{
 			throw std::runtime_error("Failed to create semaphores!");
 		}
 
@@ -1033,6 +1042,9 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 //Drawing
 void drawFrame(VkDevice device, VkSwapchainKHR swapChain, VkQueue graphicsQueue, VkQueue presentQueue) {
 
+	vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+	vkResetFences(device, 1, &inFlightFences[currentFrame]);
+
 	uint32_t imageIndex;
 	vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
@@ -1052,7 +1064,7 @@ void drawFrame(VkDevice device, VkSwapchainKHR swapChain, VkQueue graphicsQueue,
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = signalSemaphores;
 
-	if (vkQueueSubmit(graphicsQueue, 1, &submitInfo,VK_NULL_HANDLE) != VK_SUCCESS) {
+	if (vkQueueSubmit(graphicsQueue, 1, &submitInfo,inFlightFences[currentFrame]) != VK_SUCCESS) {
 		throw std::runtime_error("failed to submit draw command buffer!");
 	}
 
