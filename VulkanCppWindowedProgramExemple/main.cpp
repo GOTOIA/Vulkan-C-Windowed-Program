@@ -38,6 +38,9 @@
 #define NOMINMAX //Disable min(a,b) et max(a,b), bug fix std::min  and std::max
 
 
+
+
+
 #include <glm/glm.hpp>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_syswm.h>
@@ -57,6 +60,7 @@
 
 const int WIDTH = 800;
 const int HEIGHT = 600;
+const int MAX_FRAMES_IN_FLIGHT = 2;
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
@@ -108,9 +112,10 @@ std::vector<VkImageView> swapChainImageViews;
 std::vector<VkFramebuffer> swapChainFramebuffers;
 VkCommandPool commandPool;
 std::vector<VkCommandBuffer> commandBuffers;
-VkSemaphore imageAvailableSemaphore;
-VkSemaphore renderFinishedSemaphore;
-
+std::vector<VkSemaphore>imageAvailableSemaphores;
+std::vector<VkSemaphore>renderFinishedSemaphores;
+std::vector<VkFence> inFlightFences;
+size_t currentFrame = 0;
 
 
 int initWindow();
@@ -123,7 +128,7 @@ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surfa
 std::vector<const char*> getRequiredExtensions();
 bool checkValidationLayerSupport();
 void sdlCleanUp(SDL_Window* window);
-void cleanup(VkDevice device, VkInstance instance, VkSwapchainKHR swapChain);
+void cleanup(VkDevice device, VkInstance instance, VkSurfaceKHR surface, VkSwapchainKHR swapChain);
 VkResult CreateDebugUtilsMessengerEXT(VkInstance *instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger);
 void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator);
 void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
@@ -211,8 +216,8 @@ int main() {
 
 	
 	
-	vkDestroySurfaceKHR(instance,surface,nullptr);
-	cleanup(device, instance, swapChain);
+	
+	cleanup(device, instance,surface, swapChain);
 	sdlCleanUp(window);
 
 	return EXIT_SUCCESS;
@@ -258,10 +263,14 @@ void sdlCleanUp(SDL_Window* window) {
 	SDL_Quit();
 }
 
-void cleanup(VkDevice device, VkInstance instance, VkSwapchainKHR swapChain) {
+void cleanup(VkDevice device, VkInstance instance, VkSurfaceKHR surface, VkSwapchainKHR swapChain) {
 	
-	vkDestroySemaphore(device, renderFinishedSemaphore,nullptr);
-	vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
+	//Clean up render semaphores
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+		vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
+		vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
+	}
+	
 
 
 	for (auto framebuffer : swapChainFramebuffers) {
@@ -283,6 +292,7 @@ void cleanup(VkDevice device, VkInstance instance, VkSwapchainKHR swapChain) {
 		DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
 	}
 
+	vkDestroySurfaceKHR(instance, surface, nullptr);
 	vkDestroyInstance(instance, nullptr);
 
 }
@@ -939,16 +949,24 @@ void createCommandeBuffers(VkDevice device) {
 	}
 
 }
-
+//Frames  in flight, max work with 2 frames
+//Synchronisation GPU // Work 
 void createSemaphores(VkDevice device) {
+
+	imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+	renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 
 	VkSemaphoreCreateInfo semaphoreInfo = {};
 	semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-	if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
-		vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS) {
-		throw std::runtime_error("Failed to create semaphores!");
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+		if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
+			vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to create semaphores!");
+		}
+
 	}
+	
 }
 
 VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code) {
@@ -1016,12 +1034,12 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 void drawFrame(VkDevice device, VkSwapchainKHR swapChain, VkQueue graphicsQueue, VkQueue presentQueue) {
 
 	uint32_t imageIndex;
-	vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+	vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
 	VkSubmitInfo submitInfo = {};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-	VkSemaphore waitSemaphores[] = { imageAvailableSemaphore };
+	VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 	submitInfo.waitSemaphoreCount = 1;
 	submitInfo.pWaitSemaphores = waitSemaphores;
@@ -1030,7 +1048,7 @@ void drawFrame(VkDevice device, VkSwapchainKHR swapChain, VkQueue graphicsQueue,
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
 
-	VkSemaphore signalSemaphores[] = { renderFinishedSemaphore };
+	VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = signalSemaphores;
 
@@ -1052,5 +1070,5 @@ void drawFrame(VkDevice device, VkSwapchainKHR swapChain, VkQueue graphicsQueue,
 
 	vkQueuePresentKHR(presentQueue, &presentInfo);
 
-
+	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
