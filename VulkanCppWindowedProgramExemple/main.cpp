@@ -149,8 +149,8 @@ void createCommandPool(VkPhysicalDevice *physicalDevice, VkDevice *device, VkSur
 void createCommandeBuffers(VkDevice device);
 void createSyncObjects(VkDevice device);
 void drawFrame(VkDevice device, VkSwapchainKHR swapChain, VkQueue graphicsQueue, VkQueue presentQueue);
-
-
+void recreateSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> *swapChainImages);
+void cleanupSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> *swapChainImages);
 
 
 int main() {
@@ -216,7 +216,7 @@ int main() {
 
 	
 	
-	
+	cleanupSwapChain(physicalDevice, surface, presentSupport, device, &swapChain, &swapChainImages);
 	cleanup(device, instance,surface, swapChain);
 	sdlCleanUp(window);
 
@@ -265,6 +265,7 @@ void sdlCleanUp(SDL_Window* window) {
 
 void cleanup(VkDevice device, VkInstance instance, VkSurfaceKHR surface, VkSwapchainKHR swapChain) {
 	
+	
 	//Clean up render semaphores
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 		vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
@@ -273,21 +274,10 @@ void cleanup(VkDevice device, VkInstance instance, VkSurfaceKHR surface, VkSwapc
 	}
 	
 
+	vkDestroyCommandPool(device, commandPool, nullptr);
 
-	for (auto framebuffer : swapChainFramebuffers) {
-		vkDestroyFramebuffer(device, framebuffer, nullptr);
-	}
-
-	vkDestroyPipeline(device, graphicsPipeline, nullptr);
-	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-	vkDestroyRenderPass(device, renderPass, nullptr);
-
-	for (auto imageView : swapChainImageViews) {
-		vkDestroyImageView(device, imageView, nullptr);
-	}
-
-	vkDestroySwapchainKHR(device, swapChain, nullptr);
 	vkDestroyDevice(device, nullptr);
+	
 
 	if (enableValidationLayers) {
 		DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
@@ -1083,4 +1073,39 @@ void drawFrame(VkDevice device, VkSwapchainKHR swapChain, VkQueue graphicsQueue,
 	vkQueuePresentKHR(presentQueue, &presentInfo);
 
 	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
+//Swap chain recreation
+void recreateSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> *swapChainImages) {
+
+	vkDeviceWaitIdle(device);
+	
+	createSwapChain(physicalDevice, surface, presentSupport, device, swapChain, swapChainImages);
+	createImageViews(device, *swapChainImages, &swapChainImageViews);
+	createRenderPass(device);
+	createGraphicsPipeline(device);
+	createFrameBuffers(device);
+	createCommandeBuffers(device);
+
+}
+
+void cleanupSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> *swapChainImages) {
+
+	for (size_t i = 0; i < swapChainFramebuffers.size(); i++) {
+		vkDestroyFramebuffer(device, swapChainFramebuffers[i], nullptr);
+	}
+
+	vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+
+	vkDestroyPipeline(device, graphicsPipeline, nullptr);
+	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+	vkDestroyRenderPass(device, renderPass, nullptr);
+
+	for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+		vkDestroyImageView(device, swapChainImageViews[i], nullptr);
+	}
+
+	vkDestroySwapchainKHR(device, *swapChain, nullptr);
+
+
 }
