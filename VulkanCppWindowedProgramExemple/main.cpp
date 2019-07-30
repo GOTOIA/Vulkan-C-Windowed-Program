@@ -119,7 +119,7 @@ size_t currentFrame = 0;
 
 
 int initWindow();
-void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue, VkSwapchainKHR *swapChain, std::vector<VkImage> *swapChainImages);
+void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR *surface, VkBool32 *presentSupport, VkQueue *presentQueue, VkSwapchainKHR *swapChain, std::vector<VkImage> *swapChainImages);
 void createInstance(VkInstance *instance);
 void pickPhysicalDevice(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkSurfaceKHR surface, VkBool32 *presentSupport);
 void createLogicalDevice(VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue);
@@ -148,9 +148,9 @@ void createFrameBuffers(VkDevice device);
 void createCommandPool(VkPhysicalDevice *physicalDevice, VkDevice *device, VkSurfaceKHR surface, VkBool32 *presentSupport);
 void createCommandeBuffers(VkDevice device);
 void createSyncObjects(VkDevice device);
-void drawFrame(VkDevice device, VkSwapchainKHR swapChain, VkQueue graphicsQueue, VkQueue presentQueue);
+void drawFrame(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport,VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages, VkQueue graphicsQueue, VkQueue presentQueue);
 void recreateSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> *swapChainImages);
-void cleanupSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> *swapChainImages);
+void cleanupSwapChain( VkDevice device, VkSwapchainKHR *swapChain);
 
 
 int main() {
@@ -187,7 +187,7 @@ int main() {
 
 
 	//Init Vulkan
-	initVulkan(&instance, &physicalDevice, &device, &graphicsQueue, surface, &presentSupport,&presentQueue, &swapChain, &swapChainImages);
+	initVulkan(&instance, &physicalDevice, &device, &graphicsQueue, &surface, &presentSupport,&presentQueue, &swapChain, &swapChainImages);
 
 	
 	//MainLoop
@@ -195,7 +195,7 @@ int main() {
 	bool stillRunning = true;
 	while (stillRunning) {
 
-		drawFrame(device, swapChain, graphicsQueue, presentQueue);
+		drawFrame(device, physicalDevice, surface, presentSupport, &swapChain, swapChainImages, graphicsQueue, presentQueue);
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
 
@@ -216,7 +216,7 @@ int main() {
 
 	
 	
-	cleanupSwapChain(physicalDevice, surface, presentSupport, device, &swapChain, &swapChainImages);
+	cleanupSwapChain (device, &swapChain);
 	cleanup(device, instance,surface, swapChain);
 	sdlCleanUp(window);
 
@@ -232,7 +232,7 @@ int initWindow() {
 		return 1;
 	}
 	window = SDL_CreateWindow("Vulkan Window", SDL_WINDOWPOS_CENTERED,
-		SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_VULKAN);
+		SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 	if (window == NULL) {
 		std::cout << "Could not create SDL window." << std::endl;
 		return 1;
@@ -242,18 +242,18 @@ int initWindow() {
 }
 
 //Init Vulkan
-void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR surface, VkBool32 *presentSupport, VkQueue *presentQueue, VkSwapchainKHR *swapChain, std::vector<VkImage> *swapChainImages) {
+void initVulkan(VkInstance *instance, VkPhysicalDevice *physicalDevice, VkDevice *device, VkQueue *graphicsQueue, VkSurfaceKHR *surface, VkBool32 *presentSupport, VkQueue *presentQueue, VkSwapchainKHR *swapChain, std::vector<VkImage> *swapChainImages) {
 	createInstance(instance);
 	setupDebugMessenger(instance);
-	createSurface(window, *instance, &surface);
-	pickPhysicalDevice(instance, physicalDevice,surface,presentSupport);
-	createLogicalDevice(physicalDevice, device, graphicsQueue,surface, presentSupport, presentQueue);
-	createSwapChain(*physicalDevice, surface, *presentSupport, *device, swapChain, swapChainImages);
+	createSurface(window, *instance, surface);
+	pickPhysicalDevice(instance, physicalDevice,*surface,presentSupport);
+	createLogicalDevice(physicalDevice, device, graphicsQueue,*surface, presentSupport, presentQueue);
+	createSwapChain(*physicalDevice, *surface, *presentSupport, *device, swapChain, swapChainImages);
 	createImageViews(*device, *swapChainImages,&swapChainImageViews);
 	createRenderPass(*device);
 	createGraphicsPipeline(*device);
 	createFrameBuffers(*device);
-	createCommandPool(physicalDevice, device, surface, presentSupport);
+	createCommandPool(physicalDevice, device, *surface, presentSupport);
 	createCommandeBuffers(*device);
 	createSyncObjects(*device);
 }
@@ -472,13 +472,18 @@ VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &avai
 }
 
 VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
-	if (capabilities.currentExtent.width == std::numeric_limits<uint32_t>::max()) {
-	//if(capabilities.currentExtent.width==WIDTH){
+	//if (capabilities.currentExtent.width == std::numeric_limits<uint32_t>::max()) {
+	if(capabilities.currentExtent.width==WIDTH){
 		return capabilities.currentExtent;
 		
 	}
 	else {
-		VkExtent2D actualExtent = { WIDTH,HEIGHT };
+
+		int width, height;
+		SDL_GetWindowSize(window, &width, &height);
+
+		VkExtent2D actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+		
 		actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
 		actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
 		
@@ -529,7 +534,7 @@ void createSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBo
 	createInfo.presentMode = presentMode;
 	createInfo.clipped = VK_TRUE;
 
-	createInfo.oldSwapchain = VK_NULL_HANDLE;
+	
 
 	if (vkCreateSwapchainKHR(device, &createInfo, nullptr, swapChain) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create swap chain!");
@@ -1030,14 +1035,23 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
 
 
 //Drawing
-void drawFrame(VkDevice device, VkSwapchainKHR swapChain, VkQueue graphicsQueue, VkQueue presentQueue) {
+void drawFrame(VkDevice device, VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkSwapchainKHR *swapChain, std::vector<VkImage> swapChainImages, VkQueue graphicsQueue, VkQueue presentQueue) {
 
 	vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
-	vkResetFences(device, 1, &inFlightFences[currentFrame]);
-
+	
+	
 	uint32_t imageIndex;
-	vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
-
+	VkResult result=vkAcquireNextImageKHR(device, *swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+	
+	if(result==VK_ERROR_OUT_OF_DATE_KHR)// The swap chain has become incompatible with the surface and can no longer be used for rendering. Usually happens after a window resize
+	    {
+			recreateSwapChain(physicalDevice,surface,presentSupport,device,swapChain,&swapChainImages);
+			return;
+		}
+		else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) //The swap chain can still be used to successfully present to the surface, but the surface properties are no longer matched exactly
+		{
+			throw std::runtime_error("Failed to acquire swap chain image!");
+		}
 	VkSubmitInfo submitInfo = {};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -1054,6 +1068,8 @@ void drawFrame(VkDevice device, VkSwapchainKHR swapChain, VkQueue graphicsQueue,
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = signalSemaphores;
 
+	vkResetFences(device, 1, &inFlightFences[currentFrame]);
+
 	if (vkQueueSubmit(graphicsQueue, 1, &submitInfo,inFlightFences[currentFrame]) != VK_SUCCESS) {
 		throw std::runtime_error("failed to submit draw command buffer!");
 	}
@@ -1064,7 +1080,7 @@ void drawFrame(VkDevice device, VkSwapchainKHR swapChain, VkQueue graphicsQueue,
 	presentInfo.waitSemaphoreCount = 1;
 	presentInfo.pWaitSemaphores = signalSemaphores;
 
-	VkSwapchainKHR swapChains[] = { swapChain };
+	VkSwapchainKHR swapChains[] = { *swapChain };
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = swapChains;
 
@@ -1072,13 +1088,23 @@ void drawFrame(VkDevice device, VkSwapchainKHR swapChain, VkQueue graphicsQueue,
 
 	vkQueuePresentKHR(presentQueue, &presentInfo);
 
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+		recreateSwapChain(physicalDevice, surface, presentSupport, device, swapChain, &swapChainImages);
+	}
+	else if (result != VK_SUCCESS) {
+		throw std::runtime_error("Failed to present swap chain image");
+	}
+
 	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+	
 }
 
 //Swap chain recreation
 void recreateSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> *swapChainImages) {
 
 	vkDeviceWaitIdle(device);
+	cleanupSwapChain(device, swapChain);
 	
 	createSwapChain(physicalDevice, surface, presentSupport, device, swapChain, swapChainImages);
 	createImageViews(device, *swapChainImages, &swapChainImageViews);
@@ -1089,7 +1115,7 @@ void recreateSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, Vk
 
 }
 
-void cleanupSwapChain(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkBool32 presentSupport, VkDevice device, VkSwapchainKHR *swapChain, std::vector<VkImage> *swapChainImages) {
+void cleanupSwapChain(VkDevice device, VkSwapchainKHR *swapChain) {
 
 	for (size_t i = 0; i < swapChainFramebuffers.size(); i++) {
 		vkDestroyFramebuffer(device, swapChainFramebuffers[i], nullptr);
